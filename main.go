@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/codegangsta/cli"
+	"github.com/urfave/cli"
 	"github.com/docker/go-plugins-helpers/network"
 	"log"
 	"os"
@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	version = "0.1.2"
+	version = "0.1.2-1"
 )
 
 // Run initializes the driver

@@ -1,19 +1,14 @@
-FROM golang:1.10.1 as build
+FROM golang:1.22.2 as build
 WORKDIR /go/src/docker-sriov-plugin
-
-RUN go get github.com/docker/docker/client
-RUN go get github.com/docker/docker/api/types
-
-RUN go get github.com/golang/dep/cmd/dep
-COPY Gopkg.toml Gopkg.lock ./
-RUN dep ensure -v -vendor-only
 
 COPY . .
 RUN export CGO_LDFLAGS_ALLOW='-Wl,--unresolved-symbols=ignore-in-object-files' && \
     go install -ldflags="-s -w" -v docker-sriov-plugin
 
-FROM debian:stretch-slim
+FROM debian:bookworm-slim
+ARG PLUGIN_ARGS
 COPY --from=build /go/bin/docker-sriov-plugin /bin/docker-sriov-plugin
 COPY ibdev2netdev /tmp/tools/
-
-CMD ["/bin/docker-sriov-plugin"]
+RUN echo "$PLUGIN_ARGS" > /tmp/plugin_args
+COPY run_docker_sriov_plugin /bin
+CMD ["/bin/run_docker_sriov_plugin"]

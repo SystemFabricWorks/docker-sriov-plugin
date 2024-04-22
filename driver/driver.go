@@ -2,10 +2,10 @@ package driver
 
 import (
 	"fmt"
-	"github.com/Mellanox/sriovnet"
+	"github.com/k8snetworkplumbingwg/sriovnet"
 	"github.com/docker/go-plugins-helpers/network"
-	"github.com/docker/libnetwork/netlabel"
-	"github.com/docker/libnetwork/options"
+	"github.com/moby/moby/libnetwork/netlabel"
+	"github.com/moby/moby/libnetwork/options"
 	"log"
 	"net"
 	"os"

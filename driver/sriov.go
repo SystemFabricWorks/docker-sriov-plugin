@@ -2,7 +2,7 @@ package driver
 
 import (
 	"fmt"
-	"github.com/Mellanox/sriovnet"
+	"github.com/k8snetworkplumbingwg/sriovnet"
 	"github.com/docker/go-plugins-helpers/network"
 	"log"
 	"strconv"

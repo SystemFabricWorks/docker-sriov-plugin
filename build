@@ -50,8 +50,9 @@ function execute_cmd()
 {
 	case "$input_cmd" in
 	"make")
-		echo "Building image: $ARCH_IMAGE"
-		docker build . --force-rm -t $ARCH_IMAGE
+		 echo "Building image: $ARCH_IMAGE"
+       set -x
+		docker build . --force-rm -t $ARCH_IMAGE $@
 	;;
 	"push")
 		echo "Pushing images"
@@ -80,7 +81,8 @@ validate_input_cmd $1
 if [ $# -lt 1 ]; then
 	input_cmd=make
 else
-	input_cmd=$1
+	 input_cmd=$1
+    shift
 fi
 
-execute_cmd
+execute_cmd $@

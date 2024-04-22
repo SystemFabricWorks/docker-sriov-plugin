@@ -1,0 +1,3 @@
+#!/bin/bash
+set -x
+exec /bin/docker-sriov-plugin $(cat /tmp/plugin_args 2> /dev/null)
