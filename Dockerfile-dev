@@ -1,0 +1,7 @@
+FROM debian:bookworm-slim
+ARG PLUGIN_ARGS
+COPY docker-sriov-plugin /bin/
+COPY ibdev2netdev /tmp/tools/
+RUN echo "--debug $PLUGIN_ARGS" > /tmp/plugin_args
+COPY run_docker_sriov_plugin /bin
+CMD ["/bin/run_docker_sriov_plugin"]

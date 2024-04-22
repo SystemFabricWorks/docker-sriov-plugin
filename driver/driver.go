@@ -45,7 +45,7 @@ type ptEndpoint struct {
 type genericNetwork struct {
 	id            string
 	lock          sync.Mutex
-	IPv4Data      *network.IPAMData
+	ipv4Data      *netinfo
 	ndevEndpoints map[string]*ptEndpoint
 	driver        *driver // The network's driver
 	mode          string  // SRIOV or Passthough
@@ -58,10 +58,15 @@ type ptNetwork struct {
 	genNw *genericNetwork
 }
 
+type netinfo struct {
+	subnet       string
+	gateway      string
+}
+
 type NwIface interface {
 	CreateNetwork(d *driver, genNw *genericNetwork,
 		nid string, options map[string]string,
-		ipv4Data *network.IPAMData) error
+		ipv4Data *netinfo) error
 	DeleteNetwork(d *driver, req *network.DeleteNetworkRequest)
 
 	CreateEndpoint(r *network.CreateEndpointRequest) (*network.CreateEndpointResponse, error)
@@ -77,13 +82,13 @@ type driver struct {
 }
 
 func createGenNw(nid string, ndevName string,
-	networkMode string, ethPrefix string, ipv4Data *network.IPAMData) *genericNetwork {
+	networkMode string, ethPrefix string, ipv4Data *netinfo) *genericNetwork {
 
 	genNw := genericNetwork{}
 	ndevs := map[string]*ptEndpoint{}
 	genNw.id = nid
 	genNw.mode = networkMode
-	genNw.IPv4Data = ipv4Data
+	genNw.ipv4Data = ipv4Data
 	genNw.ndevEndpoints = ndevs
 	genNw.ndevName = ndevName
 	genNw.ethPrefix = ethPrefix
@@ -161,7 +166,7 @@ func parseNetworkOptions(id string, option options.Generic) (map[string]string, 
 }
 
 func (d *driver) _CreateNetwork(nid string, options map[string]string,
-	ipv4Data *network.IPAMData, storeConfig bool) error {
+	ipv4Data *netinfo, storeConfig bool) error {
 	var err error
 
 	genNw := createGenNw(nid, options[networkDevice], options[networkMode], options[ethPrefix], ipv4Data)
@@ -201,7 +206,8 @@ func (d *driver) _CreateNetwork(nid string, options map[string]string,
 		nwDbEntry.Mode = options[networkMode]
 		nwDbEntry.Netdev = options[networkDevice]
 		nwDbEntry.Vlan, _ = strconv.Atoi(options[sriovVlan])
-		nwDbEntry.Gateway = ipv4Data.Gateway
+		nwDbEntry.Gateway = ipv4Data.gateway
+		nwDbEntry.Subnet = ipv4Data.subnet
 
 		if options[networkPrivileged] == "1" {
 			nwDbEntry.Privileged = true
@@ -222,7 +228,7 @@ func (d *driver) CreateNetwork(req *network.CreateNetworkRequest) error {
 	var err error
 
 	log.Printf("CreateNetwork() : [ %+v ]\n", req)
-	log.Printf("CreateNetwork IPv4Data len : [ %v ]\n", len(req.IPv4Data))
+	log.Printf("CreateNetwork Ipv4Data len : [ %v ]\n", len(req.IPv4Data))
 
 	d.Lock()
 	defer d.Unlock()
@@ -237,7 +243,12 @@ func (d *driver) CreateNetwork(req *network.CreateNetworkRequest) error {
 		return ret
 	}
 
-	ipv4Data := req.IPv4Data[0]
+	ipv4Data := &netinfo{}
+	// req.Ipv4Data is goofed up. "Pool" contains the subnet.
+	ipv4Data.subnet = req.IPv4Data[0].Pool
+	// Gateway in Ipv4Data is a gateway if one is configured. If not,
+	// it is a munged  up version of the IP range with the wrong prefix size.
+	ipv4Data.gateway = req.IPv4Data[0].Gateway
 
 	err = d._CreateNetwork(req.NetworkID, options, ipv4Data, true)
 	return err
@@ -278,6 +289,7 @@ func BuildNetworkOptions(nwDbEntry *Db_Network_Info) (map[string]string, error) 
 	options[networkDevice] = nwDbEntry.Netdev
 	options[networkMode] = nwDbEntry.Mode
 	options[sriovVlan] = strconv.Itoa(nwDbEntry.Vlan)
+	options[ethPrefix] = containerVethPrefix
 	if nwDbEntry.Privileged {
 		options[networkPrivileged] = "1"
 	} else {
@@ -301,15 +313,16 @@ func (d *driver) CreatePersistentNetworks() error {
 		}
 		options, _ := BuildNetworkOptions(&n.Info)
 
-		ipv4Data := network.IPAMData{}
-		ipv4Data.Gateway = n.Info.Gateway
+		ipv4Data := &netinfo{}
+		ipv4Data.subnet = n.Info.Subnet
+		ipv4Data.gateway = n.Info.Gateway
 
 		/* Create nw, but ignore the error.
 		 * This can happen when plugin is stopped and networks are
 		 * Deleted at the docker engine level, which plugin is
 		 * completely unaware of.
 		 */
-		_ = d._CreateNetwork(n.NetworkID, options, &ipv4Data, false)
+		_ = d._CreateNetwork(n.NetworkID, options, ipv4Data, false)
 	}
 	return nil
 }
@@ -410,18 +423,28 @@ func (d *driver) Join(r *network.JoinRequest) (*network.JoinResponse, error) {
 	if endpoint.sandboxKey != "" {
 		return nil, fmt.Errorf("Endpoint [%s] has bean bind to sandbox [%s]", r.EndpointID, endpoint.sandboxKey)
 	}
-	gw, _, err := net.ParseCIDR(genNw.IPv4Data.Gateway)
-	if err != nil {
-		return nil, fmt.Errorf("Parse gateway [%s] error: %s", genNw.IPv4Data.Gateway, err.Error())
+
+	disableGws := true
+	gateway := ""
+
+	if len(genNw.ipv4Data.gateway) > 0 {
+		gw, _, err := net.ParseCIDR(genNw.ipv4Data.gateway)
+		if err != nil {
+			return nil, fmt.Errorf("Parse gateway [%s] error: %s", genNw.ipv4Data.gateway, err.Error())
+		}
+		disableGws = false
+		gateway = gw.String()
 	}
+
 	endpoint.sandboxKey = r.SandboxKey
+
 	resp := network.JoinResponse{
 		InterfaceName: network.InterfaceName{
 			SrcName:   endpoint.devName,
 			DstPrefix: genNw.ethPrefix,
 		},
-		DisableGatewayService: false,
-		Gateway:               gw.String(),
+		DisableGatewayService: disableGws,
+		Gateway:               gateway,
 	}
 
 	log.Printf("Join resp : [ %+v ]\n", resp)
@@ -492,11 +515,11 @@ func (d *driver) RevokeExternalConnectivity(r *network.RevokeExternalConnectivit
 
 func (pt *ptNetwork) CreateNetwork(d *driver, genNw *genericNetwork,
 	nid string, options map[string]string,
-	ipv4Data *network.IPAMData) error {
+	ipv4Data *netinfo) error {
 
 	pt.genNw = genNw
 
-	log.Printf("PT CreateNetwork : [%s] IPv4Data : [ %+v ]\n", pt.genNw.id, pt.genNw.IPv4Data)
+	log.Printf("PT CreateNetwork : [%s] Ipv4Data : [ %+v ]\n", pt.genNw.id, pt.genNw.ipv4Data)
 	return nil
 }
 

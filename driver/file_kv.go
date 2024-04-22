@@ -46,6 +46,8 @@ type Db_Network struct {
 }
 
 func Write_Nw_Config_to_DB(nwKey string, nw *Db_Network_Info) error {
+
+	nw.Version = 1
 	rawData, err := json.Marshal(nw)
 	if err != nil {
 		return err

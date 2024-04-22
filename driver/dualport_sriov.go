@@ -49,7 +49,7 @@ func (nw *dpSriovNetwork) getGenNw() *genericNetwork {
 
 func (nw *dpSriovNetwork) CreateNetwork(d *driver, genNw *genericNetwork,
 	nid string, options map[string]string,
-	ipv4Data *network.IPAMData) error {
+	ipv4Data *netinfo) error {
 	var err error
 	var vlan int
 	var privileged int
@@ -94,7 +94,7 @@ func (nw *dpSriovNetwork) CreateNetwork(d *driver, genNw *genericNetwork,
 
 	dev := dpPfDevices[ndevName]
 	dev.nwUseRefCount++
-	log.Printf("SRIOV CreateNetwork : [%s] IPv4Data : [ %+v ]\n", nw.genNw.id, nw.genNw.IPv4Data)
+	log.Printf("SRIOV CreateNetwork : [%s] IPv4Data : [ %+v ]\n", nw.genNw.id, nw.genNw.ipv4Data)
 	return nil
 }
 
