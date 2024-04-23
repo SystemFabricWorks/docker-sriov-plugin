@@ -6,7 +6,7 @@ RUN export CGO_LDFLAGS_ALLOW='-Wl,--unresolved-symbols=ignore-in-object-files' &
     go install -ldflags="-s -w" -v docker-sriov-plugin
 
 FROM debian:bookworm-slim
-ARG PLUGIN_ARGS
+ARG PLUGIN_ARGS=
 COPY --from=build /go/bin/docker-sriov-plugin /bin/docker-sriov-plugin
 COPY ibdev2netdev /tmp/tools/
 RUN echo "$PLUGIN_ARGS" > /tmp/plugin_args
